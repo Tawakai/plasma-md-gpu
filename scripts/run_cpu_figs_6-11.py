@@ -1,4 +1,6 @@
-"""Standalone CPU-only MD and Mori-Zwanzig / Vlasov solver for Figs. 6, 7, 8, 9, 11 of Sjogren, Hansen & Pollock (1981)."""
+"""Standalone CPU-only MD and Mori-Zwanzig / Vlasov solver for Figs. 6, 7, 8, 9, 11 of Sjogren,
+Hansen & Pollock (1981).
+"""
 
 from __future__ import annotations
 
@@ -257,7 +259,8 @@ def evaluate_shell_modes_cpu(
     charge: NDArray[np.float64],
     k_shell: NDArray[np.float64],
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """Compute real and imaginary parts of charge Fourier mode rho_Z(k) for all vectors in a shell."""
+    """Compute real and imaginary parts of charge Fourier mode rho_Z(k) for all vectors in a shell.
+    """
     n_vecs = k_shell.shape[0]
     n_total = pos.shape[0]
     inv_sqrt_n = 1.0 / math.sqrt(float(n_total))
@@ -285,7 +288,9 @@ def compute_shell_fzz_cpu(
     im_hist: NDArray[np.float64],
     max_lag: int,
 ) -> NDArray[np.float64]:
-    """Compute unnormalized intermediate charge scattering function F_ZZ(q, t) averaged over shell vectors."""
+    """Compute unnormalized intermediate charge scattering function F_ZZ(q, t) averaged over shell
+    vectors.
+    """
     n_steps, n_vecs = re_hist.shape
     lag_lim = min(max_lag, n_steps - 1)
     f_zz = np.zeros(lag_lim, dtype=np.float64)
@@ -308,7 +313,9 @@ def compute_shell_fzz_cpu(
 
 
 def plasma_dispersion_w(z: NDArray[np.float64]) -> NDArray[np.complex128]:
-    """Compute Ichimaru plasma response function W(z) = 1 - z*exp(-z^2/2)*int_0^z exp(t^2/2) dt + i*sqrt(pi/2)*z*exp(-z^2/2)."""
+    """Compute Ichimaru plasma response function W(z) = 1 - z*exp(-z^2/2)*int_0^z exp(t^2/2) dt +
+    i*sqrt(pi/2)*z*exp(-z^2/2).
+    """
     u = z / SQRT_TWO
     # Доусоновский интеграл D(u) = exp(-u^2) * int_0^u exp(t^2) dt
     re_w = 1.0 - 2.0 * u * dawsn(u)
@@ -387,7 +394,8 @@ def theory_vlasov_and_memory(
         q, gamma, r_s, mass_ratio, include_pauli=include_pauli
     )
 
-    # 1. Диэлектрическая проницаемость и спектр в приближении Власова (штриховые кривые на рис. 6-11)
+    # 1. Диэлектрическая проницаемость и спектр в приближении Власова (штриховые кривые на
+    # рис. 6-11)
     # Использован эффективный квантовый формфактор Поллака-Хансена
     alpha_e_vlasov = (k_d_sq / (q * q)) * f_ee * w_func_e
     alpha_i_vlasov = (k_d_sq / (q * q)) * f_ii * w_func_i
@@ -411,7 +419,8 @@ def theory_vlasov_and_memory(
     z_e_dressed = (w_safe + 1j * nu_coll / (1.0 - 1j * w_safe * tau_m)) / (q * v_th_e)
     w_func_e_mem = plasma_dispersion_w(z_e_dressed)
 
-    # Квазиупругий ионный пик вблизи w -> 0 (экранированное движение тяжёлых ионов, дающее узкий пик при w=0)
+    # Квазиупругий ионный пик вблизи w -> 0 (экранированное движение тяжёлых ионов, дающее
+    # узкий пик при w=0)
     z_i_dressed = (w_safe + 1j * 0.04 * gamma * v_th_i * q) / (q * v_th_i)
     w_func_i_mem = plasma_dispersion_w(z_i_dressed)
 
@@ -616,11 +625,13 @@ def plot_2x2_spectrum_figure(
 
 
 def plot_fig9_and_fig11(figures_dir: Path) -> None:
-    """Generate Fig. 9 (q=0.307 plasmon peak) and Fig. 11 (Re & Im dielectric function eps(q, w))."""
+    """Generate Fig. 9 (q=0.307 plasmon peak) and Fig. 11 (Re & Im dielectric function eps(q, w)).
+    """
     configure_matplotlib_style()
     q_small = 0.307
 
-    # --- Рис. 9: Узкий плазмонный резонанс при малом волновом числе q = 0.307 (Gamma=0.5, r_s=0.4) ---
+    # --- Рис. 9: Узкий плазмонный резонанс при малом волновом числе q = 0.307 (Gamma=0.5,
+    # r_s=0.4) ---
     omega_f9 = np.linspace(0.75, 1.45, 500, dtype=np.float64)
     s_vlasov_9, s_mem_9, _, _ = theory_vlasov_and_memory(
         q_small, omega_f9, gamma=0.5, r_s=0.4, include_pauli=False
@@ -668,7 +679,8 @@ def plot_fig9_and_fig11(figures_dir: Path) -> None:
     fig9.savefig(figures_dir / "fig9_szz_q0307.png", format="png", dpi=300)
     plt.close(fig9)
 
-    # --- Рис. 11: Действительная eps'(q,w) и мнимая eps''(q,w) части диэлектрической проницаемости ---
+    # --- Рис. 11: Действительная eps'(q,w) и мнимая eps''(q,w) части диэлектрической
+    # проницаемости ---
     omega_f11 = np.linspace(0.01, 1.65, 400, dtype=np.float64)
     _, _, eps_re_04, eps_im_04 = theory_vlasov_and_memory(
         q_small, omega_f11, gamma=0.5, r_s=0.4, include_pauli=True

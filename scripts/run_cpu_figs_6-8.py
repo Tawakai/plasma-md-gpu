@@ -1,4 +1,6 @@
-"""Standalone CPU-only molecular dynamics simulation and plotting for Figures 6, 7, and 8 of Hansen & McDonald (1981)."""
+"""Standalone CPU-only molecular dynamics simulation and plotting for Figures 6, 7, and 8 of Hansen
+& McDonald (1981).
+"""
 
 from __future__ import annotations
 
@@ -17,7 +19,8 @@ import numpy as np
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-# Физические и математические константы в приведённых плазменных единицах (a = 1, m_e = 1, omega_pe^-1 = 1)
+# Физические и математические константы в приведённых плазменных единицах (a = 1, m_e = 1,
+# omega_pe^-1 = 1)
 E_SQ: float = 1.0 / 3.0
 TWO_OVER_SQRT_PI: float = 2.0 / math.sqrt(math.pi)
 
@@ -28,7 +31,9 @@ FIG_HEIGHT_IN: float = 100.0 * MM_TO_INCH
 
 
 def configure_matplotlib_style() -> None:
-    """Configure publication-quality matplotlib parameters (160 mm width, 10 pt font, B/W-friendly)."""
+    """Configure publication-quality matplotlib parameters (160 mm width, 10 pt font,
+    B/W-friendly).
+    """
     mpl.rcParams.update(
         {
             "font.family": "serif",
@@ -356,7 +361,9 @@ def run_cpu_md_and_collect(
     n_prod: int = 3000,
     seed: int = 1981,
 ) -> dict[str, object]:
-    """Run velocity-Verlet MD trajectory purely on CPU and compute correlation functions for Figs 6-8."""
+    """Run velocity-Verlet MD trajectory purely on CPU and compute correlation functions for Figs
+    6-8.
+    """
     n_total = 2 * n_pairs
     box = ((4.0 * math.pi / 3.0) * float(n_pairs)) ** (1.0 / 3.0)
     k_b_t = 1.0 / (3.0 * gamma)
@@ -463,7 +470,8 @@ def run_cpu_md_and_collect(
     d_e_star = float(k_b_t * np.trapezoid(z_e, t_e))
     sigma_star = float((1.0 / (4.0 * math.pi)) * np.trapezoid(j_acf, t_e))
 
-    # Динамический структурный фактор заряда S_ZZ(k, omega) / S_ZZ(k) через косинус-преобразование с окном Ханна
+    # Динамический структурный фактор заряда S_ZZ(k, omega) / S_ZZ(k) через косинус-
+    # преобразование с окном Ханна
     omega_grid = np.linspace(0.0, 2.2, 220, dtype=np.float64)
     t_max_f = float(t_e[-1]) if t_e.size > 1 else 1.0
     hann_win = 0.5 * (1.0 + np.cos(math.pi * t_e / t_max_f))
@@ -582,7 +590,8 @@ def save_results_and_plots(
     fig7.savefig(figures_dir / "fig7_ion_vacf.png", format="png", dpi=300)
     plt.close(fig7)
 
-    # --- График 8: Коррелятор заряда F_ZZ(k, t) и динамический структурный фактор S_ZZ(k, omega) ---
+    # --- График 8: Коррелятор заряда F_ZZ(k, t) и динамический структурный фактор S_ZZ(k,
+    # omega) ---
     fig8, (ax8_l, ax8_r) = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, FIG_HEIGHT_IN * 0.94))
     ax8_l.axhline(0.0, color="#888888", linestyle=":", linewidth=0.8)
     ax8_l.plot(
