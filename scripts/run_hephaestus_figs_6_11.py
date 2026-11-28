@@ -86,6 +86,17 @@ def _gaussian_memory_laplace(
     return re_m + 1j * im_m
 
 
+def _free_streaming_m2(
+    omega: NDArray[np.float64], q: float, v_th: float
+) -> NDArray[np.complex128]:
+    """Exact second-order memory function M_2^(0)(q, z=-i*omega) of free-streaming particles."""
+    z = -1j * omega
+    w0_sq = (q * v_th) ** 2
+    f0 = _gaussian_memory_laplace(omega, 1.0 / (q * v_th))
+    m1_0 = (1.0 / f0) - z
+    return (w0_sq / m1_0) - z
+
+
 def theory_vlasov_and_memory_ab_initio(
     q: float,
     omega_grid: NDArray[np.float64],
@@ -100,7 +111,7 @@ def theory_vlasov_and_memory_ab_initio(
     NDArray[np.float64],
     NDArray[np.float64],
 ]:
-    """Compute Vlasov and Mori-Zwanzig S_ZZ(q,w) and eps(q,w) strictly from Eqs. (9)-(27)."""
+    """Compute exact Vlasov and 2x2 Mori-Zwanzig S_ZZ(q,w) with free-streaming + HNC memory."""
     if hnc is None:
         hnc = solve_two_component_hnc(
             gamma, r_s, include_pauli=include_pauli, mass_ratio=mass_ratio
@@ -113,60 +124,62 @@ def theory_vlasov_and_memory_ab_initio(
     k_de_sq = 1.0 / k_b_t
 
     w_safe = np.maximum(omega_grid, 1e-4)
-    z_e = w_safe / (q * v_th_e)
-    z_i = w_safe / (q * v_th_i)
+    w_func_e = plasma_dispersion_w(w_safe / (q * v_th_e))
+    w_func_i = plasma_dispersion_w(w_safe / (q * v_th_i))
 
-    w_func_e = plasma_dispersion_w(z_e)
-    w_func_i = plasma_dispersion_w(z_i)
+    # 1. Exact Vlasov response (bare Coulomb screening, dashed curve in Figs. 6-8)
+    eps_vlasov = 1.0 + (k_de_sq / (q * q)) * (w_func_e + w_func_i)
+    s_zz_vlasov = (np.imag(w_func_e + w_func_i) / (2.0 * math.pi * w_safe)) / (
+        np.abs(eps_vlasov) ** 2
+    )
 
-    lam_ii, lam_ie, lam_ee = deutsch_wavelengths(gamma, r_s, mass_ratio)
-    f_ii = 1.0 / (1.0 + (q * lam_ii) ** 2)
-    f_ie = 1.0 / (1.0 + (q * lam_ie) ** 2)
-    f_ee = 1.0 / (1.0 + (q * lam_ee) ** 2)
-
-    if include_pauli:
-        pauli_amp = k_b_t * math.log(2.0)
-        alpha_p = 1.0 / (math.pi * math.log(2.0) * lam_ee * lam_ee)
-        v_pauli_q = (
-            pauli_amp * ((math.pi / alpha_p) ** 1.5) * np.exp(-(q * q) / (4.0 * alpha_p))
-        )
-        v_coul_q = 4.0 * math.pi * E_SQ / (q * q)
-        f_ee_eff = f_ee + v_pauli_q / v_coul_q
-    else:
-        f_ee_eff = f_ee
-
-    # 1. Exact Vlasov response Eqs. (9) and (21)
-    alpha0_e = (k_de_sq / (q * q)) * f_ee * w_func_e
-    alpha0_i = (k_de_sq / (q * q)) * f_ii * w_func_i
-    eps_vlasov = 1.0 + alpha0_e + alpha0_i
-
-    fdt_factor = (q * q) / (2.0 * math.pi * k_de_sq * w_safe)
-    s_zz_vlasov = fdt_factor * np.imag(-1.0 / eps_vlasov)
-
-    # 2. First-principles Mori-Zwanzig response from HNC & Table V moments Eqs. (19)-(27)
-    s_ii, s_ie, s_ee, _, _, w4_ee, _, tau_22 = compute_table_v_row_ab_initio(
+    # 2. Exact 2x2 Mori-Zwanzig continued fraction with free-streaming M_2^(0) + HNC S(q)
+    s_ii, s_ie, s_ee, w4_ii, _, w4_ee, tau_11, tau_22 = compute_table_v_row_ab_initio(
         q, gamma, r_s, hnc, mass_ratio=mass_ratio
     )
-    omega0_e_sq = (q * q) * k_b_t
-    w1_ee_sq = w4_ee / omega0_e_sq
-    w1_vlasov_e_sq = 3.0 * omega0_e_sq + f_ee_eff
+    s_mat = np.array([[s_ii, s_ie], [s_ie, s_ee]], dtype=np.float64)
+    s_inv = np.linalg.inv(s_mat)
 
-    delta_coll_e = w1_ee_sq - w1_vlasov_e_sq
-    s_zz_hnc = 0.5 * (s_ii + s_ee - 2.0 * s_ie)
-    s_zz_vlas_stat = (q * q) / (q * q + k_de_sq * (f_ee_eff + f_ii))
-    static_ratio = s_zz_vlas_stat / max(1e-4, s_zz_hnc)
+    w0_i_sq = (q * q) * (k_b_t / mass_ratio)
+    w0_e_sq = (q * q) * k_b_t
+    restoring = np.diag([w0_i_sq, w0_e_sq]) @ s_inv
 
-    m_coll_e = delta_coll_e * _gaussian_memory_laplace(w_safe, tau_22)
-    mem_shift = -1j * (w_safe / w1_vlasov_e_sq) * m_coll_e
-    w_dressed_e = w_func_e / (1.0 - mem_shift * w_func_e)
+    # Exact free-streaming second-order memory functions (preserve exact Landau damping)
+    m2_free_i = _free_streaming_m2(w_safe, q, v_th_i)
+    m2_free_e = _free_streaming_m2(w_safe, q, v_th_e)
 
-    alpha_e_mem = (
-        (k_de_sq / (q * q)) * (0.5 * (f_ee_eff + f_ie) * static_ratio) * w_dressed_e
-    )
-    eps_mem = 1.0 + alpha_e_mem + alpha0_i
-    s_zz_mem = fdt_factor * np.imag(-1.0 / eps_mem)
+    # Collisional excess over free-streaming + static restoring: Delta_coll = w1^2 - 2*w0^2 - (w0^2*S^-1)_aa
+    delta_coll_i = max(0.0, (w4_ii / w0_i_sq) - 2.0 * w0_i_sq - float(restoring[0, 0]))
+    delta_coll_e = max(0.0, (w4_ee / w0_e_sq) - 2.0 * w0_e_sq - float(restoring[1, 1]))
 
-    return s_zz_vlasov, s_zz_mem, np.real(eps_mem), np.imag(eps_mem)
+    g11 = _gaussian_memory_laplace(w_safe, tau_11)
+    g22 = _gaussian_memory_laplace(w_safe, tau_22)
+
+    s_zz_mem = np.empty_like(w_safe)
+    eps_re = np.empty_like(w_safe)
+    eps_im = np.empty_like(w_safe)
+    eye2 = np.eye(2, dtype=np.complex128)
+
+    for idx, w_val in enumerate(w_safe):
+        z = -1j * w_val
+        m2_z = np.diag(
+            [
+                m2_free_i[idx] + delta_coll_i * g11[idx],
+                m2_free_e[idx] + delta_coll_e * g22[idx],
+            ]
+        )
+        m1_z = np.linalg.solve(z * eye2 + m2_z, restoring)
+        f_z = np.linalg.solve(z * eye2 + m1_z, s_mat)
+        f_zz = f_z[0, 0] + f_z[1, 1] - 2.0 * f_z[0, 1]
+        s_zz_mem[idx] = max(0.0, float(np.real(f_zz)) / (2.0 * math.pi))
+
+        s_zz_stat = 0.5 * (s_ii + s_ee - 2.0 * s_ie)
+        inv_eps = 1.0 - (2.0 * k_de_sq / (q * q)) * (s_zz_stat + z * (0.5 * f_zz))
+        eps_val = 1.0 / inv_eps
+        eps_re[idx] = float(np.real(eps_val))
+        eps_im[idx] = float(np.imag(eps_val))
+
+    return s_zz_vlasov, s_zz_mem, eps_re, eps_im
 
 
 def fit_fss_student_birge(points: list[FssPoint]) -> dict[str, HephaestusFssFit]:
